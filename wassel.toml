@@ -1,2 +1,5 @@
 [stack]
 plugins = ["crates/vk-plugin", "crates/tg-plugin"]
+
+[variables]
+deanery_host = "http://localhost:8000"
