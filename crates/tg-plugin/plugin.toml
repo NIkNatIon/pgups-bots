@@ -1,0 +1,15 @@
+id = "tg-bot"
+name = "Telegram Bot Plugin"
+version = "0.0.0"
+component = "${CARGO_TARGET_DIR:../../target}/wasm32-wasip2/debug/tg_plugin.wasm"
+endpoint = "/tg/"
+
+[variables]
+tg_bot_token = "${TG_BOT_TOKEN}"
+db_connection = "${DB_CONNECTION}"
+
+[build]
+cmd = "cargo build --target wasm32-wasip2 -p tg-plugin"
+
+[build.data]
+"../../data/karta_pgups.jpg" = "karta_pgups.jpg"

@@ -1,0 +1,16 @@
+id = "vk-bot"
+name = "VK Bot Plugin"
+version = "0.0.0"
+component = "${CARGO_TARGET_DIR:../../target}/wasm32-wasip2/debug/vk_plugin.wasm"
+endpoint = "/vk/"
+
+[variables]
+vk_token = "${VK_TOKEN}"
+vk_confirmation_code = "${VK_CONFIRMATION_CODE}"
+db_connection = "${DB_CONNECTION}"
+
+[build]
+cmd = "cargo build --target wasm32-wasip2 -p vk-plugin"
+
+[build.data]
+"../../data/karta_pgups.jpg" = "karta_pgups.jpg"
