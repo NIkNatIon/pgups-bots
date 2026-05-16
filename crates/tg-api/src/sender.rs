@@ -1,5 +1,5 @@
-use bot_core::messenger::Button;
 use crate::keyboard::TgInlineKeyboard;
+use bot_core::messenger::Button;
 
 pub struct TgSender {
     pub bot_token: String,
@@ -42,7 +42,8 @@ impl TgSender {
         format!(
             "https://api.telegram.org/bot{}/setWebhook?\
              url={}",
-            self.bot_token, urlencode(webhook_url)
+            self.bot_token,
+            urlencode(webhook_url)
         )
     }
 
@@ -77,13 +78,17 @@ impl TgSender {
         if !buttons.is_empty() {
             let keyboard = TgInlineKeyboard::from_buttons(buttons);
             body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
-            body.extend_from_slice(b"Content-Disposition: form-data; name=\"reply_markup\"\r\n\r\n");
+            body.extend_from_slice(
+                b"Content-Disposition: form-data; name=\"reply_markup\"\r\n\r\n",
+            );
             body.extend_from_slice(keyboard.to_json().as_bytes());
             body.extend_from_slice(b"\r\n");
         }
 
         body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
-        body.extend_from_slice(b"Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n");
+        body.extend_from_slice(
+            b"Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n",
+        );
         body.extend_from_slice(b"Content-Type: image/jpeg\r\n\r\n");
         body.extend_from_slice(photo_bytes);
         body.extend_from_slice(format!("\r\n--{}--\r\n", boundary).as_bytes());

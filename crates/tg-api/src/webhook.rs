@@ -34,12 +34,10 @@ pub struct Chat {
     pub id: i64,
 }
 
-impl Update {
-    pub fn parse(body: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice(body)
-    }
+pub type ExtractedUpdate<'a> = (i64, Option<&'a str>, Option<&'a str>, Option<&'a str>);
 
-    pub fn extract(&self) -> Option<(i64, Option<&str>, Option<&str>, Option<&str>)> {
+impl Update {
+    pub fn extract(&self) -> Option<ExtractedUpdate<'_>> {
         if let Some(cb) = &self.callback_query {
             let chat_id = cb.message.as_ref()?.chat.id;
             let payload = cb.data.as_deref();
@@ -53,5 +51,13 @@ impl Update {
         }
 
         None
+    }
+}
+
+impl TryFrom<&[u8]> for Update {
+    type Error = serde_json::Error;
+
+    fn try_from(body: &[u8]) -> Result<Self, Self::Error> {
+        serde_json::from_slice(body)
     }
 }

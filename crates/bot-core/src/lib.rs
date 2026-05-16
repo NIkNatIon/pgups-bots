@@ -1,6 +1,6 @@
+pub mod db;
 pub mod menu;
 pub mod messenger;
-pub mod db;
 pub mod schedule;
 pub mod texts;
 
@@ -8,8 +8,10 @@ pub mod texts;
 mod tests;
 
 use menu::MenuNode;
-use messenger::{BotResponse, OutgoingMessage, Button};
-use schedule::{current_weekday, current_parity, tomorrow_weekday, next_week_parity, weekday_ru, parity_ru};
+use messenger::{BotResponse, Button, OutgoingMessage};
+use schedule::{
+    current_parity, current_weekday, next_week_parity, parity_ru, tomorrow_weekday, weekday_ru,
+};
 use texts::Texts;
 
 pub struct BotHandler {
@@ -37,11 +39,11 @@ impl BotHandler {
         text: Option<&str>,
         student_group: Option<&str>,
     ) -> BotResponse {
-        if let Some(t) = text {
-            if t == "/start" {
-                let (msg, nid) = self.navigate_to_root();
-                return BotResponse::Message(msg, nid);
-            }
+        if let Some(t) = text
+            && t == "/start"
+        {
+            let (msg, nid) = self.navigate_to_root();
+            return BotResponse::Message(msg, nid);
         }
         if let Some(p) = payload {
             match p {
@@ -54,7 +56,9 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_tomorrow" => {
@@ -72,7 +76,9 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_this_week" => {
@@ -83,7 +89,9 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_next_week" => {
@@ -94,34 +102,32 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_change_group" => {
-                    return BotResponse::AskGroup { new_node_id: user_node_id };
+                    return BotResponse::AskGroup {
+                        new_node_id: user_node_id,
+                    };
                 }
                 _ => {}
             }
         }
 
-        if let Some(node_id) = user_node_id {
-            if let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id) {
-                if node.slug == "schedule" && payload.is_none() {
-                    if let Some(group_text) = text {
-                        if !group_text.is_empty() {
-                            return BotResponse::Message(
-                                self.schedule_menu(Some(group_text)),
-                                Some(node_id),
-                            );
-                        }
-                    }
-                    if student_group.is_some() {
-                        return BotResponse::Message(
-                            self.schedule_menu(student_group),
-                            Some(node_id),
-                        );
-                    }
-                }
+        if let Some(node_id) = user_node_id
+            && let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id)
+            && node.slug == "schedule"
+            && payload.is_none()
+        {
+            if let Some(group_text) = text
+                && !group_text.is_empty()
+            {
+                return BotResponse::Message(self.schedule_menu(Some(group_text)), Some(node_id));
+            }
+            if student_group.is_some() {
+                return BotResponse::Message(self.schedule_menu(student_group), Some(node_id));
             }
         }
 
@@ -131,13 +137,10 @@ impl BotHandler {
 
         match target_node_id {
             Some(node_id) => {
-                if let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id) {
-                    if node.slug == "schedule" {
-                        return BotResponse::Message(
-                            self.schedule_menu(student_group),
-                            Some(node_id),
-                        );
-                    }
+                if let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id)
+                    && node.slug == "schedule"
+                {
+                    return BotResponse::Message(self.schedule_menu(student_group), Some(node_id));
                 }
                 let (msg, nid) = self.navigate_to(node_id);
                 BotResponse::Message(msg, nid)
@@ -156,38 +159,71 @@ impl BotHandler {
                 let parity = parity_ru(current_parity());
 
                 OutgoingMessage {
-                    text: self.texts.format("msg.schedule_header", &[
-                        ("group", group),
-                        ("weekday", today),
-                        ("parity", parity),
-                    ]),
+                    text: self.texts.format(
+                        "msg.schedule_header",
+                        &[("group", group), ("weekday", today), ("parity", parity)],
+                    ),
                     buttons: vec![
-                        Button { label: self.texts.get("btn.schedule_today").into(), payload: "schedule_today".into() },
-                        Button { label: self.texts.get("btn.schedule_tomorrow").into(), payload: "schedule_tomorrow".into() },
-                        Button { label: self.texts.get("btn.schedule_this_week").into(), payload: "schedule_this_week".into() },
-                        Button { label: self.texts.get("btn.schedule_next_week").into(), payload: "schedule_next_week".into() },
-                        Button { label: self.texts.get("btn.schedule_change_group").into(), payload: "schedule_change_group".into() },
-                        Button { label: self.texts.get("btn.back").into(), payload: self.find_schedule_parent_id() },
-                        Button { label: self.texts.get("btn.home").into(), payload: self.get_roots().first().map(|r| r.id.to_string()).unwrap_or("1".into()) },
+                        Button {
+                            label: self.texts.get("btn.schedule_today").into(),
+                            payload: "schedule_today".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_tomorrow").into(),
+                            payload: "schedule_tomorrow".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_this_week").into(),
+                            payload: "schedule_this_week".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_next_week").into(),
+                            payload: "schedule_next_week".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_change_group").into(),
+                            payload: "schedule_change_group".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.back").into(),
+                            payload: self.find_schedule_parent_id(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.home").into(),
+                            payload: self
+                                .get_roots()
+                                .first()
+                                .map(|r| r.id.to_string())
+                                .unwrap_or("1".into()),
+                        },
                     ],
                     image_url: None,
                 }
             }
-            None => {
-                OutgoingMessage {
-                    text: self.texts.get("msg.ask_group").into(),
-                    buttons: vec![
-                        Button { label: self.texts.get("btn.back").into(), payload: self.find_schedule_parent_id() },
-                        Button { label: self.texts.get("btn.home").into(), payload: self.get_roots().first().map(|r| r.id.to_string()).unwrap_or("1".into()) },
-                    ],
-                    image_url: None,
-                }
-            }
+            None => OutgoingMessage {
+                text: self.texts.get("msg.ask_group").into(),
+                buttons: vec![
+                    Button {
+                        label: self.texts.get("btn.back").into(),
+                        payload: self.find_schedule_parent_id(),
+                    },
+                    Button {
+                        label: self.texts.get("btn.home").into(),
+                        payload: self
+                            .get_roots()
+                            .first()
+                            .map(|r| r.id.to_string())
+                            .unwrap_or("1".into()),
+                    },
+                ],
+                image_url: None,
+            },
         }
     }
 
     fn find_schedule_parent_id(&self) -> String {
-        self.menu_nodes.iter()
+        self.menu_nodes
+            .iter()
             .find(|n| n.slug == "schedule")
             .and_then(|n| n.parent_id)
             .map(|id| id.to_string())
@@ -216,13 +252,13 @@ impl BotHandler {
             });
 
             let parent = self.menu_nodes.iter().find(|n| n.id == parent_id);
-            if parent.is_some_and(|p| p.parent_id.is_some()) {
-                if let Some(root) = self.get_roots().first() {
-                    buttons.push(Button {
-                        label: self.texts.get("btn.home").to_string(),
-                        payload: root.id.to_string(),
-                    });
-                }
+            if parent.is_some_and(|p| p.parent_id.is_some())
+                && let Some(root) = self.get_roots().first()
+            {
+                buttons.push(Button {
+                    label: self.texts.get("btn.home").to_string(),
+                    payload: root.id.to_string(),
+                });
             }
         }
 
