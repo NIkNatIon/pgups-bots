@@ -12,8 +12,8 @@ pub struct TgInlineButton {
     pub callback_data: String,
 }
 
-impl TgInlineKeyboard {
-    pub fn from_buttons(buttons: &[Button]) -> Self {
+impl From<&[Button]> for TgInlineKeyboard {
+    fn from(buttons: &[Button]) -> Self {
         let rows = buttons
             .iter()
             .map(|btn| {
@@ -28,7 +28,9 @@ impl TgInlineKeyboard {
             inline_keyboard: rows,
         }
     }
+}
 
+impl TgInlineKeyboard {
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
     }
