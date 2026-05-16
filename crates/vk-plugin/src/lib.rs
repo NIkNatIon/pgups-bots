@@ -1,7 +1,7 @@
 use std::fs;
 use std::collections::HashMap;
 
-use wassel_sdk_rust::bindings::{
+use wassel_sdk::bindings::{
     export,
     exports::wassel::foundation::http_handler::Guest,
     wasi::http::types::{
@@ -18,7 +18,7 @@ use vk_api::{callback::CallbackEvent, photo, sender::VkSender};
 struct Plugin;
 
 fn get_config(key: &str) -> String {
-    wassel_sdk_rust::bindings::wasi::config::store::get(key)
+    wassel_sdk::bindings::wasi_config::store::get(key)
         .unwrap_or_default()
         .unwrap_or_default()
 }

@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-wassel-sdk-rust = { path = "../../../sdk-rust" }
+wassel-sdk.workspace = true
 bot-core = { path = "../bot-core" }
 vk-api = { path = "../vk-api" }
 serde = { version = "1", features = ["derive"] }
