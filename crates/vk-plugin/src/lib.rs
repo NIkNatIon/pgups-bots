@@ -2,19 +2,11 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 
-use wassel_sdk::bindings::{
-    export,
-    exports::wassel::foundation::http_handler::Guest,
-    wasi::http::types::{IncomingRequest, ResponseOutparam},
-    wasi::io::streams::StreamError,
-    wassel::foundation::postgres::{self, Parameter},
-};
-use wassel_sdk::http::{IntoResponse, client};
+use wassel_sdk::bindings::wassel::foundation::postgres::{self, Parameter};
+use wassel_sdk::http::{IntoResponse, Request, Response, client, handler};
 
 use bot_core::{BotHandler, db, menu::MenuNode, messenger::BotResponse, schedule, texts::Texts};
 use vk_api::{callback::CallbackEvent, photo, sender::VkSender};
-
-struct Plugin;
 
 fn get_config(key: &str) -> String {
     wassel_sdk::bindings::wasi_config::store::get(key)
@@ -22,52 +14,33 @@ fn get_config(key: &str) -> String {
         .unwrap_or_default()
 }
 
-impl Guest for Plugin {
-    fn handle_request(request: IncomingRequest, response_out: ResponseOutparam) {
-        let db_connection = get_config("db_connection");
-        let vk_token = get_config("vk_token");
-        let vk_confirmation_code = get_config("vk_confirmation_code");
-        let deanery_host = get_config("deanery_host");
+#[handler]
+fn handle_request(request: Request) -> Response {
+    let db_connection = get_config("db_connection");
+    let vk_token = get_config("vk_token");
+    let vk_confirmation_code = get_config("vk_confirmation_code");
+    let deanery_host = get_config("deanery_host");
 
-        run_migrations(&db_connection);
+    run_migrations(&db_connection);
 
-        let body = match read_request_body(&request) {
-            Ok(b) => b,
-            Err(_) => {
-                "Bad request"
-                    .into_response()
-                    .write_to_response_outparam(response_out);
-                return;
-            }
-        };
+    let mut body = request.into_body();
+    let mut buf = Vec::new();
+    let _ = body.read_to_end(&mut buf);
 
-        let event = match CallbackEvent::try_from(body.as_slice()) {
-            Ok(e) => e,
-            Err(_) => {
-                "Bad request"
-                    .into_response()
-                    .write_to_response_outparam(response_out);
-                return;
-            }
-        };
+    let event = match CallbackEvent::try_from(buf.as_slice()) {
+        Ok(e) => e,
+        Err(_) => return "Bad request".into_response(),
+    };
 
-        match event.event_type.as_str() {
-            "confirmation" => {
-                vk_confirmation_code
-                    .into_response()
-                    .write_to_response_outparam(response_out);
-                return;
+    match event.event_type.as_str() {
+        "confirmation" => vk_confirmation_code.into_response(),
+        "message_new" => {
+            if let Some(message) = event.into_message() {
+                handle_message_new(message, &db_connection, &vk_token, &deanery_host);
             }
-            "message_new" => {
-                if let Some(message) = event.into_message() {
-                    handle_message_new(message, &db_connection, &vk_token, &deanery_host);
-                }
-            }
-            _ => {}
+            "ok".into_response()
         }
-
-        "ok".into_response()
-            .write_to_response_outparam(response_out);
+        _ => "ok".into_response(),
     }
 }
 
@@ -485,24 +458,3 @@ fn load_texts(conn: &postgres::Connection) -> Texts {
     }
     Texts::new(map)
 }
-
-fn read_request_body(request: &IncomingRequest) -> Result<Vec<u8>, String> {
-    let body = request.consume().map_err(|_| "No body")?;
-    let stream = body.stream().map_err(|_| "No stream")?;
-    let mut buf = Vec::new();
-    loop {
-        match stream.blocking_read(4096) {
-            Err(StreamError::Closed) => break,
-            Err(e) => return Err(format!("{e:?}")),
-            Ok(vec) => {
-                if vec.is_empty() {
-                    break;
-                }
-                buf.extend_from_slice(&vec);
-            }
-        }
-    }
-    Ok(buf)
-}
-
-export!(Plugin);
