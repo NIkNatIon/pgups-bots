@@ -35,7 +35,11 @@ pub struct Room {
 
 pub fn format_lessons(lessons: &[Lesson], weekday: &str, parity: &str) -> String {
     if lessons.is_empty() {
-        return format!("{} ({})\nПар нет.\n", weekday_ru(weekday), parity_ru(parity));
+        return format!(
+            "{} ({})\nПар нет.\n",
+            weekday_ru(weekday),
+            parity_ru(parity)
+        );
     }
 
     let mut sorted: Vec<&Lesson> = lessons.iter().collect();
@@ -45,13 +49,15 @@ pub fn format_lessons(lessons: &[Lesson], weekday: &str, parity: &str) -> String
     result.push_str(&format!("({})\n", parity_ru(parity)));
 
     for lesson in sorted {
-        let teacher = lesson.teacher.as_ref()
+        let teacher = lesson
+            .teacher
+            .as_ref()
             .map(|t| t.name.as_str())
             .unwrap_or("");
-        let room = lesson.room.as_ref()
-            .map(|r| r.name.as_str())
-            .unwrap_or("");
-        let time = PAIR_TIMES.get((lesson.pair_num - 1) as usize).unwrap_or(&"");
+        let room = lesson.room.as_ref().map(|r| r.name.as_str()).unwrap_or("");
+        let time = PAIR_TIMES
+            .get((lesson.pair_num - 1) as usize)
+            .unwrap_or(&"");
 
         result.push_str("———————————————\n");
         result.push_str(&format!("{}\n", time));
@@ -101,7 +107,15 @@ pub fn parity_ru(parity: &str) -> &str {
 }
 
 pub fn current_weekday() -> &'static str {
-    let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let days = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ];
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -112,7 +126,15 @@ pub fn current_weekday() -> &'static str {
 }
 
 pub fn tomorrow_weekday() -> &'static str {
-    let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let days = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ];
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
@@ -133,10 +155,21 @@ pub fn current_parity() -> &'static str {
 }
 
 pub fn next_week_parity() -> &'static str {
-    if current_parity() == "Even" { "Odd" } else { "Even" }
+    if current_parity() == "Even" {
+        "Odd"
+    } else {
+        "Even"
+    }
 }
 
-pub const WEEKDAYS: [&str; 6] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+pub const WEEKDAYS: [&str; 6] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
 
 pub fn urlencode(s: &str) -> String {
     let mut result = String::new();

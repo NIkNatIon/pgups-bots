@@ -1,5 +1,5 @@
-use bot_core::messenger::Button;
 use crate::keyboard::VkKeyboard;
+use bot_core::messenger::Button;
 
 pub struct VkSender {
     pub access_token: String,
@@ -65,7 +65,9 @@ impl VkSender {
              &hash={hash}\
              &access_token={}\
              &v={}",
-            urlencode(photo), self.access_token, self.api_version
+            urlencode(photo),
+            self.access_token,
+            self.api_version
         )
     }
 }

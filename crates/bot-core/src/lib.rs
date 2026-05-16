@@ -1,6 +1,6 @@
+pub mod db;
 pub mod menu;
 pub mod messenger;
-pub mod db;
 pub mod schedule;
 pub mod texts;
 
@@ -8,8 +8,10 @@ pub mod texts;
 mod tests;
 
 use menu::MenuNode;
-use messenger::{BotResponse, OutgoingMessage, Button};
-use schedule::{current_weekday, current_parity, tomorrow_weekday, next_week_parity, weekday_ru, parity_ru};
+use messenger::{BotResponse, Button, OutgoingMessage};
+use schedule::{
+    current_parity, current_weekday, next_week_parity, parity_ru, tomorrow_weekday, weekday_ru,
+};
 use texts::Texts;
 
 pub struct BotHandler {
@@ -54,7 +56,9 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_tomorrow" => {
@@ -72,7 +76,9 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_this_week" => {
@@ -83,7 +89,9 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_next_week" => {
@@ -94,11 +102,15 @@ impl BotHandler {
                             new_node_id: user_node_id,
                         };
                     } else {
-                        return BotResponse::AskGroup { new_node_id: user_node_id };
+                        return BotResponse::AskGroup {
+                            new_node_id: user_node_id,
+                        };
                     }
                 }
                 "schedule_change_group" => {
-                    return BotResponse::AskGroup { new_node_id: user_node_id };
+                    return BotResponse::AskGroup {
+                        new_node_id: user_node_id,
+                    };
                 }
                 _ => {}
             }
@@ -156,38 +168,71 @@ impl BotHandler {
                 let parity = parity_ru(current_parity());
 
                 OutgoingMessage {
-                    text: self.texts.format("msg.schedule_header", &[
-                        ("group", group),
-                        ("weekday", today),
-                        ("parity", parity),
-                    ]),
+                    text: self.texts.format(
+                        "msg.schedule_header",
+                        &[("group", group), ("weekday", today), ("parity", parity)],
+                    ),
                     buttons: vec![
-                        Button { label: self.texts.get("btn.schedule_today").into(), payload: "schedule_today".into() },
-                        Button { label: self.texts.get("btn.schedule_tomorrow").into(), payload: "schedule_tomorrow".into() },
-                        Button { label: self.texts.get("btn.schedule_this_week").into(), payload: "schedule_this_week".into() },
-                        Button { label: self.texts.get("btn.schedule_next_week").into(), payload: "schedule_next_week".into() },
-                        Button { label: self.texts.get("btn.schedule_change_group").into(), payload: "schedule_change_group".into() },
-                        Button { label: self.texts.get("btn.back").into(), payload: self.find_schedule_parent_id() },
-                        Button { label: self.texts.get("btn.home").into(), payload: self.get_roots().first().map(|r| r.id.to_string()).unwrap_or("1".into()) },
+                        Button {
+                            label: self.texts.get("btn.schedule_today").into(),
+                            payload: "schedule_today".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_tomorrow").into(),
+                            payload: "schedule_tomorrow".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_this_week").into(),
+                            payload: "schedule_this_week".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_next_week").into(),
+                            payload: "schedule_next_week".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.schedule_change_group").into(),
+                            payload: "schedule_change_group".into(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.back").into(),
+                            payload: self.find_schedule_parent_id(),
+                        },
+                        Button {
+                            label: self.texts.get("btn.home").into(),
+                            payload: self
+                                .get_roots()
+                                .first()
+                                .map(|r| r.id.to_string())
+                                .unwrap_or("1".into()),
+                        },
                     ],
                     image_url: None,
                 }
             }
-            None => {
-                OutgoingMessage {
-                    text: self.texts.get("msg.ask_group").into(),
-                    buttons: vec![
-                        Button { label: self.texts.get("btn.back").into(), payload: self.find_schedule_parent_id() },
-                        Button { label: self.texts.get("btn.home").into(), payload: self.get_roots().first().map(|r| r.id.to_string()).unwrap_or("1".into()) },
-                    ],
-                    image_url: None,
-                }
-            }
+            None => OutgoingMessage {
+                text: self.texts.get("msg.ask_group").into(),
+                buttons: vec![
+                    Button {
+                        label: self.texts.get("btn.back").into(),
+                        payload: self.find_schedule_parent_id(),
+                    },
+                    Button {
+                        label: self.texts.get("btn.home").into(),
+                        payload: self
+                            .get_roots()
+                            .first()
+                            .map(|r| r.id.to_string())
+                            .unwrap_or("1".into()),
+                    },
+                ],
+                image_url: None,
+            },
         }
     }
 
     fn find_schedule_parent_id(&self) -> String {
-        self.menu_nodes.iter()
+        self.menu_nodes
+            .iter()
             .find(|n| n.slug == "schedule")
             .and_then(|n| n.parent_id)
             .map(|id| id.to_string())

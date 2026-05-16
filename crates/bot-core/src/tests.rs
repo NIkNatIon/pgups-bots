@@ -12,23 +12,96 @@ fn test_texts() -> Texts {
     map.insert("btn.schedule_tomorrow".into(), "На завтра".into());
     map.insert("btn.schedule_this_week".into(), "Текущая неделя".into());
     map.insert("btn.schedule_next_week".into(), "Следующая неделя".into());
-    map.insert("btn.schedule_change_group".into(), "🔄 Сменить группу".into());
+    map.insert(
+        "btn.schedule_change_group".into(),
+        "🔄 Сменить группу".into(),
+    );
     map.insert("msg.select_section".into(), "Выберите раздел:".into());
-    map.insert("msg.ask_group".into(), "Введите номер вашей группы (например, ИВБ-211):".into());
-    map.insert("msg.schedule_header".into(), "Расписание для группы {group}\n\nСегодня: {weekday}, {parity} неделя".into());
+    map.insert(
+        "msg.ask_group".into(),
+        "Введите номер вашей группы (например, ИВБ-211):".into(),
+    );
+    map.insert(
+        "msg.schedule_header".into(),
+        "Расписание для группы {group}\n\nСегодня: {weekday}, {parity} неделя".into(),
+    );
     Texts::new(map)
 }
 
 fn test_menu() -> Vec<MenuNode> {
     vec![
-        MenuNode { id: 1, parent_id: None, slug: "start".into(), title: "Главное меню".into(), content: Some("Добро пожаловать!".into()), image_url: None, sort_order: 0 },
-        MenuNode { id: 2, parent_id: Some(1), slug: "info".into(), title: "Информация".into(), content: Some("Выберите раздел:".into()), image_url: None, sort_order: 0 },
-        MenuNode { id: 3, parent_id: Some(1), slug: "about".into(), title: "О проекте".into(), content: Some("Описание проекта".into()), image_url: None, sort_order: 1 },
-        MenuNode { id: 10, parent_id: Some(2), slug: "abit".into(), title: "Абитуриентам".into(), content: Some("Инфо для абитуриентов".into()), image_url: None, sort_order: 0 },
-        MenuNode { id: 11, parent_id: Some(2), slug: "stud".into(), title: "Студентам".into(), content: Some("Инфо для студентов".into()), image_url: None, sort_order: 1 },
-        MenuNode { id: 20, parent_id: Some(10), slug: "docs".into(), title: "Документы".into(), content: Some("Список документов".into()), image_url: None, sort_order: 0 },
-        MenuNode { id: 21, parent_id: Some(10), slug: "map".into(), title: "Карта".into(), content: None, image_url: Some("karta.jpg".into()), sort_order: 1 },
-        MenuNode { id: 30, parent_id: Some(11), slug: "schedule".into(), title: "Расписание".into(), content: None, image_url: None, sort_order: 0 },
+        MenuNode {
+            id: 1,
+            parent_id: None,
+            slug: "start".into(),
+            title: "Главное меню".into(),
+            content: Some("Добро пожаловать!".into()),
+            image_url: None,
+            sort_order: 0,
+        },
+        MenuNode {
+            id: 2,
+            parent_id: Some(1),
+            slug: "info".into(),
+            title: "Информация".into(),
+            content: Some("Выберите раздел:".into()),
+            image_url: None,
+            sort_order: 0,
+        },
+        MenuNode {
+            id: 3,
+            parent_id: Some(1),
+            slug: "about".into(),
+            title: "О проекте".into(),
+            content: Some("Описание проекта".into()),
+            image_url: None,
+            sort_order: 1,
+        },
+        MenuNode {
+            id: 10,
+            parent_id: Some(2),
+            slug: "abit".into(),
+            title: "Абитуриентам".into(),
+            content: Some("Инфо для абитуриентов".into()),
+            image_url: None,
+            sort_order: 0,
+        },
+        MenuNode {
+            id: 11,
+            parent_id: Some(2),
+            slug: "stud".into(),
+            title: "Студентам".into(),
+            content: Some("Инфо для студентов".into()),
+            image_url: None,
+            sort_order: 1,
+        },
+        MenuNode {
+            id: 20,
+            parent_id: Some(10),
+            slug: "docs".into(),
+            title: "Документы".into(),
+            content: Some("Список документов".into()),
+            image_url: None,
+            sort_order: 0,
+        },
+        MenuNode {
+            id: 21,
+            parent_id: Some(10),
+            slug: "map".into(),
+            title: "Карта".into(),
+            content: None,
+            image_url: Some("karta.jpg".into()),
+            sort_order: 1,
+        },
+        MenuNode {
+            id: 30,
+            parent_id: Some(11),
+            slug: "schedule".into(),
+            title: "Расписание".into(),
+            content: None,
+            image_url: None,
+            sort_order: 0,
+        },
     ]
 }
 
@@ -76,7 +149,8 @@ fn navigate_first_level_no_home_button() {
 #[test]
 fn navigate_by_text() {
     let handler = BotHandler::new(test_menu(), test_texts());
-    let (msg, node_id) = unwrap_message(handler.handle_message(Some(1), None, Some("О проекте"), None));
+    let (msg, node_id) =
+        unwrap_message(handler.handle_message(Some(1), None, Some("О проекте"), None));
     assert_eq!(node_id, Some(3));
     assert_eq!(msg.text, "Описание проекта");
 }
@@ -115,7 +189,11 @@ fn content_fallback_to_title() {
 fn leaf_node_has_only_nav_buttons() {
     let handler = BotHandler::new(test_menu(), test_texts());
     let (msg, _) = unwrap_message(handler.handle_message(Some(10), Some("20"), None, None));
-    assert!(msg.buttons.iter().all(|b| b.label == "⬅ Назад" || b.label == "🏠 В начало"));
+    assert!(
+        msg.buttons
+            .iter()
+            .all(|b| b.label == "⬅ Назад" || b.label == "🏠 В начало")
+    );
 }
 
 #[test]
@@ -129,7 +207,8 @@ fn schedule_without_group_asks_for_group() {
 #[test]
 fn schedule_with_group_shows_menu() {
     let handler = BotHandler::new(test_menu(), test_texts());
-    let (msg, node_id) = unwrap_message(handler.handle_message(Some(11), Some("30"), None, Some("БИБ-512")));
+    let (msg, node_id) =
+        unwrap_message(handler.handle_message(Some(11), Some("30"), None, Some("БИБ-512")));
     assert_eq!(node_id, Some(30));
     assert!(msg.text.contains("БИБ-512"));
     assert!(msg.buttons.iter().any(|b| b.payload == "schedule_today"));
@@ -158,11 +237,14 @@ fn schedule_today_without_group_asks() {
 #[test]
 fn texts_format_works() {
     let texts = test_texts();
-    let result = texts.format("msg.schedule_header", &[
-        ("group", "БИБ-512"),
-        ("weekday", "Понедельник"),
-        ("parity", "чётная"),
-    ]);
+    let result = texts.format(
+        "msg.schedule_header",
+        &[
+            ("group", "БИБ-512"),
+            ("weekday", "Понедельник"),
+            ("parity", "чётная"),
+        ],
+    );
     assert!(result.contains("БИБ-512"));
     assert!(result.contains("Понедельник"));
     assert!(result.contains("чётная"));

@@ -25,11 +25,9 @@ CREATE TABLE IF NOT EXISTS bot_texts (
 );
 "#;
 
-pub const SELECT_ALL_MENU_NODES: &str =
-    "SELECT id, parent_id, slug, title, content, image_url, sort_order FROM menu_nodes ORDER BY sort_order";
+pub const SELECT_ALL_MENU_NODES: &str = "SELECT id, parent_id, slug, title, content, image_url, sort_order FROM menu_nodes ORDER BY sort_order";
 
-pub const SELECT_USER: &str =
-    "SELECT id, current_menu_node_id, student_group FROM users WHERE platform = $1 AND platform_user_id = $2";
+pub const SELECT_USER: &str = "SELECT id, current_menu_node_id, student_group FROM users WHERE platform = $1 AND platform_user_id = $2";
 
 pub const UPSERT_USER: &str = r#"
 INSERT INTO users (platform, platform_user_id)
@@ -38,14 +36,10 @@ ON CONFLICT (platform, platform_user_id) DO NOTHING
 RETURNING id, current_menu_node_id, student_group
 "#;
 
-pub const UPDATE_USER_NODE: &str =
-    "UPDATE users SET current_menu_node_id = $1 WHERE id = $2";
+pub const UPDATE_USER_NODE: &str = "UPDATE users SET current_menu_node_id = $1 WHERE id = $2";
 
-pub const UPDATE_USER_GROUP: &str =
-    "UPDATE users SET student_group = $1 WHERE id = $2";
+pub const UPDATE_USER_GROUP: &str = "UPDATE users SET student_group = $1 WHERE id = $2";
 
-pub const CLEAR_USER_GROUP: &str =
-    "UPDATE users SET student_group = NULL WHERE id = $1";
+pub const CLEAR_USER_GROUP: &str = "UPDATE users SET student_group = NULL WHERE id = $1";
 
-pub const SELECT_ALL_TEXTS: &str =
-    "SELECT key, value FROM bot_texts";
+pub const SELECT_ALL_TEXTS: &str = "SELECT key, value FROM bot_texts";
