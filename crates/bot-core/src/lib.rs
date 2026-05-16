@@ -39,11 +39,11 @@ impl BotHandler {
         text: Option<&str>,
         student_group: Option<&str>,
     ) -> BotResponse {
-        if let Some(t) = text {
-            if t == "/start" {
-                let (msg, nid) = self.navigate_to_root();
-                return BotResponse::Message(msg, nid);
-            }
+        if let Some(t) = text
+            && t == "/start"
+        {
+            let (msg, nid) = self.navigate_to_root();
+            return BotResponse::Message(msg, nid);
         }
         if let Some(p) = payload {
             match p {
@@ -116,24 +116,18 @@ impl BotHandler {
             }
         }
 
-        if let Some(node_id) = user_node_id {
-            if let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id) {
-                if node.slug == "schedule" && payload.is_none() {
-                    if let Some(group_text) = text {
-                        if !group_text.is_empty() {
-                            return BotResponse::Message(
-                                self.schedule_menu(Some(group_text)),
-                                Some(node_id),
-                            );
-                        }
-                    }
-                    if student_group.is_some() {
-                        return BotResponse::Message(
-                            self.schedule_menu(student_group),
-                            Some(node_id),
-                        );
-                    }
-                }
+        if let Some(node_id) = user_node_id
+            && let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id)
+            && node.slug == "schedule"
+            && payload.is_none()
+        {
+            if let Some(group_text) = text
+                && !group_text.is_empty()
+            {
+                return BotResponse::Message(self.schedule_menu(Some(group_text)), Some(node_id));
+            }
+            if student_group.is_some() {
+                return BotResponse::Message(self.schedule_menu(student_group), Some(node_id));
             }
         }
 
@@ -143,13 +137,10 @@ impl BotHandler {
 
         match target_node_id {
             Some(node_id) => {
-                if let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id) {
-                    if node.slug == "schedule" {
-                        return BotResponse::Message(
-                            self.schedule_menu(student_group),
-                            Some(node_id),
-                        );
-                    }
+                if let Some(node) = self.menu_nodes.iter().find(|n| n.id == node_id)
+                    && node.slug == "schedule"
+                {
+                    return BotResponse::Message(self.schedule_menu(student_group), Some(node_id));
                 }
                 let (msg, nid) = self.navigate_to(node_id);
                 BotResponse::Message(msg, nid)
@@ -261,13 +252,13 @@ impl BotHandler {
             });
 
             let parent = self.menu_nodes.iter().find(|n| n.id == parent_id);
-            if parent.is_some_and(|p| p.parent_id.is_some()) {
-                if let Some(root) = self.get_roots().first() {
-                    buttons.push(Button {
-                        label: self.texts.get("btn.home").to_string(),
-                        payload: root.id.to_string(),
-                    });
-                }
+            if parent.is_some_and(|p| p.parent_id.is_some())
+                && let Some(root) = self.get_roots().first()
+            {
+                buttons.push(Button {
+                    label: self.texts.get("btn.home").to_string(),
+                    payload: root.id.to_string(),
+                });
             }
         }
 

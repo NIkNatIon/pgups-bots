@@ -338,22 +338,21 @@ fn get_or_create_user(
             Parameter::Text(platform.to_string()),
             Parameter::Int64(platform_user_id),
         ],
-    ) {
-        if let Some(row) = rows.rows.first() {
-            let user_id = match &row[0] {
-                postgres::Value::Int64(id) => *id,
-                _ => return (0, None, None),
-            };
-            let node_id = match &row[1] {
-                postgres::Value::Int64(id) => Some(*id),
-                _ => None,
-            };
-            let group = match &row[2] {
-                postgres::Value::Text(g) => Some(g.clone()),
-                _ => None,
-            };
-            return (user_id, node_id, group);
-        }
+    ) && let Some(row) = rows.rows.first()
+    {
+        let user_id = match &row[0] {
+            postgres::Value::Int64(id) => *id,
+            _ => return (0, None, None),
+        };
+        let node_id = match &row[1] {
+            postgres::Value::Int64(id) => Some(*id),
+            _ => None,
+        };
+        let group = match &row[2] {
+            postgres::Value::Text(g) => Some(g.clone()),
+            _ => None,
+        };
+        return (user_id, node_id, group);
     }
     if let Ok(rows) = conn.query(
         db::UPSERT_USER,
@@ -361,14 +360,13 @@ fn get_or_create_user(
             Parameter::Text(platform.to_string()),
             Parameter::Int64(platform_user_id),
         ],
-    ) {
-        if let Some(row) = rows.rows.first() {
-            let user_id = match &row[0] {
-                postgres::Value::Int64(id) => *id,
-                _ => 0,
-            };
-            return (user_id, None, None);
-        }
+    ) && let Some(row) = rows.rows.first()
+    {
+        let user_id = match &row[0] {
+            postgres::Value::Int64(id) => *id,
+            _ => 0,
+        };
+        return (user_id, None, None);
     }
     (0, None, None)
 }
@@ -420,7 +418,7 @@ fn load_texts(conn: &postgres::Connection) -> Texts {
     if let Ok(rows) = conn.query(db::SELECT_ALL_TEXTS, &[]) {
         for row in &rows.rows {
             if let (Some(postgres::Value::Text(key)), Some(postgres::Value::Text(value))) =
-                (row.get(0), row.get(1))
+                (row.first(), row.get(1))
             {
                 map.insert(key.clone(), value.clone());
             }

@@ -151,7 +151,11 @@ pub fn current_parity() -> &'static str {
         .as_secs();
     let days_since_epoch = now_secs / 86400;
     let week_number = days_since_epoch / 7;
-    if week_number % 2 == 0 { "Even" } else { "Odd" }
+    if week_number.is_multiple_of(2) {
+        "Even"
+    } else {
+        "Odd"
+    }
 }
 
 pub fn next_week_parity() -> &'static str {
