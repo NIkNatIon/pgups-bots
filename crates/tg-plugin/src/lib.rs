@@ -1,21 +1,16 @@
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
+use std::io::Read;
 
-use wassel_sdk::bindings::{
-    export,
-    exports::wassel::foundation::http_handler::Guest,
-    wasi::http::types::{
-        Fields, IncomingRequest, IncomingResponse, Method, OutgoingBody, OutgoingRequest,
-        OutgoingResponse, ResponseOutparam,
-    },
-    wasi::io::streams::StreamError,
-    wassel::foundation::{http_client, postgres::{self, Parameter}},
+use wassel_sdk::http::{
+    IntoResponse, Request, Response,
+    client,
+    handler,
 };
+use wassel_sdk::bindings::wassel::foundation::postgres::{self, Parameter};
 
 use bot_core::{BotHandler, db, menu::MenuNode, messenger::BotResponse, schedule, texts::Texts};
 use tg_api::{sender::TgSender, webhook::Update};
-
-struct Plugin;
 
 fn get_config(key: &str) -> String {
     wassel_sdk::bindings::wasi_config::store::get(key)
@@ -23,34 +18,26 @@ fn get_config(key: &str) -> String {
         .unwrap_or_default()
 }
 
-impl Guest for Plugin {
-    fn handle_request(request: IncomingRequest, response_out: ResponseOutparam) {
-        let db_connection = get_config("db_connection");
-        let tg_bot_token = get_config("tg_bot_token");
-        let deanery_host = get_config("deanery_host");
+#[handler]
+fn handle_request(request: Request) -> Response {
+    let db_connection = get_config("db_connection");
+    let tg_bot_token = get_config("tg_bot_token");
+    let deanery_host = get_config("deanery_host");
 
-        run_migrations(&db_connection);
+    run_migrations(&db_connection);
 
-        let body = match read_request_body(&request) {
-            Ok(b) => b,
-            Err(_) => {
-                write_response(response_out, 400, b"Bad request");
-                return;
-            }
-        };
+    let mut body = request.into_body();
+    let mut buf = Vec::new();
+    let _ = body.read_to_end(&mut buf);
 
-        let update = match Update::parse(&body) {
-            Ok(u) => u,
-            Err(_) => {
-                write_response(response_out, 400, b"Invalid JSON");
-                return;
-            }
-        };
+    let update = match Update::parse(&buf) {
+        Ok(u) => u,
+        Err(_) => return "Bad request".into_response(),
+    };
 
-        handle_update(update, &db_connection, &tg_bot_token, &deanery_host);
+    handle_update(update, &db_connection, &tg_bot_token, &deanery_host);
 
-        write_response(response_out, 200, b"ok");
-    }
+    "ok".into_response()
 }
 
 fn run_migrations(db_connection: &str) {
@@ -82,8 +69,7 @@ fn handle_update(update: Update, db_connection: &str, tg_bot_token: &str, deaner
     if let Some(cb_id) = callback_query_id {
         let sender = TgSender::new(tg_bot_token.to_string());
         let url = sender.build_answer_callback_url(cb_id);
-        let req = OutgoingRequest::new(Fields::new());
-        let _ = http_client::send(&url, req);
+        let _ = client::get(url).send();
     }
 
     let is_in_schedule = current_node_id
@@ -101,15 +87,15 @@ fn handle_update(update: Update, db_connection: &str, tg_bot_token: &str, deaner
             "{}/api/schedule/lessons?group={}&weekday=Monday&parity=Odd",
             deanery_host, schedule::urlencode(&group)
         );
-        let req = OutgoingRequest::new(Fields::new());
-        let group_exists = match http_client::send(&check_url, req) {
-            Ok(resp) => match read_response_body(&resp) {
-                Some(body) => match serde_json::from_slice::<Vec<schedule::Lesson>>(&body) {
+        let group_exists = match client::get(check_url).send() {
+            Ok(resp) => {
+                let body = resp.into_body();
+                let bytes = read_body(body);
+                match serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
                     Ok(lessons) => !lessons.is_empty(),
                     Err(_) => false,
-                },
-                None => false,
-            },
+                }
+            }
             Err(_) => false,
         };
 
@@ -127,8 +113,7 @@ fn handle_update(update: Update, db_connection: &str, tg_bot_token: &str, deaner
                 bot_core::messenger::Button { label: handler.texts_ref().get("btn.home").into(), payload: "1".into() },
             ];
             let url = sender.build_send_url(chat_id, handler.texts_ref().get("msg.schedule_invalid_group"), &buttons);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         return;
     }
@@ -151,19 +136,14 @@ fn process_response(response: BotResponse, chat_id: i64, conn: &postgres::Connec
                     let (content_type, multipart_body) = sender.build_send_photo_body(
                         chat_id, &photo_bytes, &msg.text, &msg.buttons,
                     );
-                    let headers = Fields::new();
-                    headers.set(&"content-type".to_string(), &[content_type.as_bytes().to_vec()]).unwrap();
-                    let req = OutgoingRequest::new(headers);
-                    req.set_method(&Method::Post).unwrap();
-                    let req_body = req.body().unwrap();
-                    { let stream = req_body.write().unwrap(); stream.write(&multipart_body).unwrap(); }
-                    OutgoingBody::finish(req_body, None).unwrap();
-                    let _ = http_client::send(&sender.send_photo_url(), req);
+                    let _ = client::post(sender.send_photo_url())
+                        .header("content-type", content_type.parse::<http::HeaderValue>().unwrap())
+                        .body(multipart_body)
+                        .send();
                 }
             } else {
                 let url = sender.build_send_url(chat_id, &msg.text, &msg.buttons);
-                let req = OutgoingRequest::new(Fields::new());
-                let _ = http_client::send(&url, req);
+                let _ = client::get(url).send();
             }
         }
         BotResponse::ScheduleRequest { group, weekday, parity, new_node_id } => {
@@ -175,23 +155,21 @@ fn process_response(response: BotResponse, chat_id: i64, conn: &postgres::Connec
                 "{}/api/schedule/lessons?group={}&weekday={}&parity={}",
                 deanery_host, schedule::urlencode(&group), weekday, parity
             );
-            let req = OutgoingRequest::new(Fields::new());
-            let text = match http_client::send(&url, req) {
-                Ok(resp) => match read_response_body(&resp) {
-                    Some(body) => match serde_json::from_slice::<Vec<schedule::Lesson>>(&body) {
-                        Ok(lessons) if lessons.is_empty() => texts.get("msg.schedule_invalid_group").to_string(),
+            let text = match client::get(url).send() {
+                Ok(resp) => {
+                    let bytes = read_body(resp.into_body());
+                    match serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
+                        Ok(lessons) if lessons.is_empty() => texts.get("msg.schedule_day_off").to_string(),
                         Ok(lessons) => schedule::format_lessons(&lessons, &weekday, &parity),
                         Err(_) => texts.get("msg.schedule_error").to_string(),
-                    },
-                    None => texts.get("msg.schedule_server_down").to_string(),
-                },
+                    }
+                }
                 Err(_) => texts.get("msg.schedule_connection_error").to_string(),
             };
 
             let buttons = schedule_buttons(texts);
             let url = sender.build_send_url(chat_id, &text, &buttons);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         BotResponse::ScheduleWeekRequest { group, parity, new_node_id } => {
             if let Some(node_id) = new_node_id {
@@ -204,13 +182,11 @@ fn process_response(response: BotResponse, chat_id: i64, conn: &postgres::Connec
                     "{}/api/schedule/lessons?group={}&weekday={}&parity={}",
                     deanery_host, schedule::urlencode(&group), weekday, parity
                 );
-                let req = OutgoingRequest::new(Fields::new());
-                if let Ok(resp) = http_client::send(&url, req) {
-                    if let Some(body) = read_response_body(&resp) {
-                        if let Ok(lessons) = serde_json::from_slice::<Vec<schedule::Lesson>>(&body) {
-                            full_text.push_str(&schedule::format_lessons(&lessons, weekday, &parity));
-                            full_text.push('\n');
-                        }
+                if let Ok(resp) = client::get(url).send() {
+                    let bytes = read_body(resp.into_body());
+                    if let Ok(lessons) = serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
+                        full_text.push_str(&schedule::format_lessons(&lessons, weekday, &parity));
+                        full_text.push('\n');
                     }
                 }
             }
@@ -221,8 +197,7 @@ fn process_response(response: BotResponse, chat_id: i64, conn: &postgres::Connec
 
             let buttons = schedule_buttons(texts);
             let url = sender.build_send_url(chat_id, &full_text, &buttons);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         BotResponse::AskGroup { new_node_id } => {
             if let Some(node_id) = new_node_id {
@@ -235,8 +210,7 @@ fn process_response(response: BotResponse, chat_id: i64, conn: &postgres::Connec
                 bot_core::messenger::Button { label: texts.get("btn.home").into(), payload: "1".into() },
             ];
             let url = sender.build_send_url(chat_id, texts.get("msg.ask_group"), &buttons);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
     }
 }
@@ -251,6 +225,12 @@ fn schedule_buttons(texts: &Texts) -> Vec<bot_core::messenger::Button> {
         bot_core::messenger::Button { label: texts.get("btn.back").into(), payload: "schedule_back".into() },
         bot_core::messenger::Button { label: texts.get("btn.home").into(), payload: "1".into() },
     ]
+}
+
+fn read_body(mut body: wassel_sdk::http::Body) -> Vec<u8> {
+    let mut buf = Vec::new();
+    let _ = body.read_to_end(&mut buf);
+    buf
 }
 
 fn get_or_create_user(conn: &postgres::Connection, platform: &str, platform_user_id: i64) -> (i64, Option<i64>, Option<String>) {
@@ -297,41 +277,3 @@ fn load_texts(conn: &postgres::Connection) -> Texts {
     }
     Texts::new(map)
 }
-
-fn read_request_body(request: &IncomingRequest) -> Result<Vec<u8>, String> {
-    let body = request.consume().map_err(|_| "No body")?;
-    let stream = body.stream().map_err(|_| "No stream")?;
-    let mut buf = Vec::new();
-    loop {
-        match stream.blocking_read(4096) {
-            Err(StreamError::Closed) => break,
-            Err(e) => return Err(format!("{e:?}")),
-            Ok(vec) => { if vec.is_empty() { break; } buf.extend_from_slice(&vec); }
-        }
-    }
-    Ok(buf)
-}
-
-fn read_response_body(response: &IncomingResponse) -> Option<Vec<u8>> {
-    let body = response.consume().ok()?;
-    let stream = body.stream().ok()?;
-    let mut buf = Vec::new();
-    loop {
-        match stream.blocking_read(4096) {
-            Err(_) => break,
-            Ok(vec) => { if vec.is_empty() { break; } buf.extend_from_slice(&vec); }
-        }
-    }
-    Some(buf)
-}
-
-fn write_response(out: ResponseOutparam, status: u16, body_bytes: &[u8]) {
-    let res = OutgoingResponse::new(Fields::new());
-    res.set_status_code(status).unwrap();
-    let body = res.body().unwrap();
-    { let stream = body.write().unwrap(); stream.write(body_bytes.into()).unwrap(); }
-    OutgoingBody::finish(body, None).unwrap();
-    ResponseOutparam::set(out, Ok(res));
-}
-
-export!(Plugin);

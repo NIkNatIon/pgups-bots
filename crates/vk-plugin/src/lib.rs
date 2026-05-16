@@ -1,16 +1,15 @@
 use std::fs;
 use std::collections::HashMap;
+use std::io::Read;
 
 use wassel_sdk::bindings::{
     export,
     exports::wassel::foundation::http_handler::Guest,
-    wasi::http::types::{
-        Fields, IncomingRequest, IncomingResponse, Method, OutgoingBody, OutgoingRequest,
-        OutgoingResponse, ResponseOutparam,
-    },
+    wasi::http::types::{IncomingRequest, ResponseOutparam},
     wasi::io::streams::StreamError,
-    wassel::foundation::{http_client, postgres::{self, Parameter}},
+    wassel::foundation::postgres::{self, Parameter},
 };
+use wassel_sdk::http::{IntoResponse, client};
 
 use bot_core::{BotHandler, db, menu::MenuNode, messenger::BotResponse, schedule, texts::Texts};
 use vk_api::{callback::CallbackEvent, photo, sender::VkSender};
@@ -35,7 +34,7 @@ impl Guest for Plugin {
         let body = match read_request_body(&request) {
             Ok(b) => b,
             Err(_) => {
-                write_response(response_out, 400, b"Bad request");
+                "Bad request".into_response().write_to_response_outparam(response_out);
                 return;
             }
         };
@@ -43,14 +42,14 @@ impl Guest for Plugin {
         let event = match CallbackEvent::parse(&body) {
             Ok(e) => e,
             Err(_) => {
-                write_response(response_out, 400, b"Invalid JSON");
+                "Bad request".into_response().write_to_response_outparam(response_out);
                 return;
             }
         };
 
         match event.event_type.as_str() {
             "confirmation" => {
-                write_response(response_out, 200, vk_confirmation_code.as_bytes());
+                vk_confirmation_code.into_response().write_to_response_outparam(response_out);
                 return;
             }
             "message_new" => {
@@ -61,7 +60,7 @@ impl Guest for Plugin {
             _ => {}
         }
 
-        write_response(response_out, 200, b"ok");
+        "ok".into_response().write_to_response_outparam(response_out);
     }
 }
 
@@ -104,15 +103,14 @@ fn handle_message_new(message: vk_api::callback::Message, db_connection: &str, v
             "{}/api/schedule/lessons?group={}&weekday=Monday&parity=Odd",
             deanery_host, schedule::urlencode(&group)
         );
-        let req = OutgoingRequest::new(Fields::new());
-        let group_exists = match http_client::send(&check_url, req) {
-            Ok(resp) => match read_response_body(&resp) {
-                Some(body) => match serde_json::from_slice::<Vec<schedule::Lesson>>(&body) {
+        let group_exists = match client::get(check_url).send() {
+            Ok(resp) => {
+                let bytes = read_body(resp.into_body());
+                match serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
                     Ok(lessons) => !lessons.is_empty(),
                     Err(_) => false,
-                },
-                None => false,
-            },
+                }
+            }
             Err(_) => false,
         };
 
@@ -130,14 +128,13 @@ fn handle_message_new(message: vk_api::callback::Message, db_connection: &str, v
                 bot_core::messenger::Button { label: handler.texts_ref().get("btn.home").into(), payload: "1".into() },
             ];
             let url = sender.build_send_url(peer_id, handler.texts_ref().get("msg.schedule_invalid_group"), &buttons, None);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         return;
     }
 
     let response = handler.handle_message(current_node_id, payload, Some(&message.text), student_group.as_deref());
-    process_response(response, peer_id, &conn, user_id, vk_token, deanery_host, &handler.texts_ref());
+    process_response(response, peer_id, &conn, user_id, vk_token, deanery_host, handler.texts_ref());
 }
 
 fn process_response(response: BotResponse, peer_id: i64, conn: &postgres::Connection, user_id: i64, vk_token: &str, deanery_host: &str, texts: &Texts) {
@@ -150,8 +147,7 @@ fn process_response(response: BotResponse, peer_id: i64, conn: &postgres::Connec
             }
             let attachment = msg.image_url.as_deref().and_then(|path| upload_photo(&sender, peer_id, path));
             let url = sender.build_send_url(peer_id, &msg.text, &msg.buttons, attachment.as_deref());
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         BotResponse::ScheduleRequest { group, weekday, parity, new_node_id } => {
             if let Some(node_id) = new_node_id {
@@ -162,23 +158,21 @@ fn process_response(response: BotResponse, peer_id: i64, conn: &postgres::Connec
                 "{}/api/schedule/lessons?group={}&weekday={}&parity={}",
                 deanery_host, schedule::urlencode(&group), weekday, parity
             );
-            let req = OutgoingRequest::new(Fields::new());
-            let text = match http_client::send(&url, req) {
-                Ok(resp) => match read_response_body(&resp) {
-                    Some(body) => match serde_json::from_slice::<Vec<schedule::Lesson>>(&body) {
-                        Ok(lessons) if lessons.is_empty() => texts.get("msg.schedule_invalid_group").to_string(),
+            let text = match client::get(url).send() {
+                Ok(resp) => {
+                    let bytes = read_body(resp.into_body());
+                    match serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
+                        Ok(lessons) if lessons.is_empty() => texts.get("msg.schedule_day_off").to_string(),
                         Ok(lessons) => schedule::format_lessons(&lessons, &weekday, &parity),
                         Err(_) => texts.get("msg.schedule_error").to_string(),
-                    },
-                    None => texts.get("msg.schedule_server_down").to_string(),
-                },
+                    }
+                }
                 Err(_) => texts.get("msg.schedule_connection_error").to_string(),
             };
 
             let buttons = schedule_buttons(texts);
             let url = sender.build_send_url(peer_id, &text, &buttons, None);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         BotResponse::ScheduleWeekRequest { group, parity, new_node_id } => {
             if let Some(node_id) = new_node_id {
@@ -191,13 +185,11 @@ fn process_response(response: BotResponse, peer_id: i64, conn: &postgres::Connec
                     "{}/api/schedule/lessons?group={}&weekday={}&parity={}",
                     deanery_host, schedule::urlencode(&group), weekday, parity
                 );
-                let req = OutgoingRequest::new(Fields::new());
-                if let Ok(resp) = http_client::send(&url, req) {
-                    if let Some(body) = read_response_body(&resp) {
-                        if let Ok(lessons) = serde_json::from_slice::<Vec<schedule::Lesson>>(&body) {
-                            full_text.push_str(&schedule::format_lessons(&lessons, weekday, &parity));
-                            full_text.push('\n');
-                        }
+                if let Ok(resp) = client::get(url).send() {
+                    let bytes = read_body(resp.into_body());
+                    if let Ok(lessons) = serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
+                        full_text.push_str(&schedule::format_lessons(&lessons, weekday, &parity));
+                        full_text.push('\n');
                     }
                 }
             }
@@ -208,8 +200,7 @@ fn process_response(response: BotResponse, peer_id: i64, conn: &postgres::Connec
 
             let buttons = schedule_buttons(texts);
             let url = sender.build_send_url(peer_id, &full_text, &buttons, None);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
         BotResponse::AskGroup { new_node_id } => {
             if let Some(node_id) = new_node_id {
@@ -222,8 +213,7 @@ fn process_response(response: BotResponse, peer_id: i64, conn: &postgres::Connec
                 bot_core::messenger::Button { label: texts.get("btn.home").into(), payload: "1".into() },
             ];
             let url = sender.build_send_url(peer_id, texts.get("msg.ask_group"), &buttons, None);
-            let req = OutgoingRequest::new(Fields::new());
-            let _ = http_client::send(&url, req);
+            let _ = client::get(url).send();
         }
     }
 }
@@ -245,34 +235,32 @@ fn upload_photo(sender: &VkSender, peer_id: i64, file_path: &str) -> Option<Stri
     let (content_type, multipart_body) = photo::build_multipart_body(&file_bytes, "photo.jpg");
 
     let url = sender.build_get_upload_server_url(peer_id);
-    let req = OutgoingRequest::new(Fields::new());
-    let resp = http_client::send(&url, req).ok()?;
-    let resp_body = read_response_body(&resp)?;
+    let resp = client::get(url).send().ok()?;
+    let resp_body = read_body(resp.into_body());
     let upload_server: photo::UploadServerResponse = serde_json::from_slice(&resp_body).ok()?;
     let upload_url = upload_server.response?.upload_url;
 
-    let headers = Fields::new();
-    headers.set(&"content-type".to_string(), &[content_type.as_bytes().to_vec()]).ok()?;
-    let req = OutgoingRequest::new(headers);
-    req.set_method(&Method::Post).ok()?;
-    let req_body = req.body().ok()?;
-    {
-        let stream = req_body.write().ok()?;
-        stream.write(&multipart_body).ok()?;
-    }
-    OutgoingBody::finish(req_body, None).ok()?;
-    let resp = http_client::send(&upload_url, req).ok()?;
-    let resp_body = read_response_body(&resp)?;
+    let resp = client::post(upload_url)
+        .header("content-type", content_type.parse::<http::HeaderValue>().unwrap())
+        .body(multipart_body)
+        .send()
+        .ok()?;
+    let resp_body = read_body(resp.into_body());
     let upload_result: photo::UploadResult = serde_json::from_slice(&resp_body).ok()?;
 
     let url = sender.build_save_photo_url(&upload_result.photo, upload_result.server, &upload_result.hash);
-    let req = OutgoingRequest::new(Fields::new());
-    let resp = http_client::send(&url, req).ok()?;
-    let resp_body = read_response_body(&resp)?;
+    let resp = client::get(url).send().ok()?;
+    let resp_body = read_body(resp.into_body());
     let save_resp: photo::SavePhotoResponse = serde_json::from_slice(&resp_body).ok()?;
     let saved = save_resp.response?.into_iter().next()?;
 
     Some(saved.to_attachment())
+}
+
+fn read_body(mut body: wassel_sdk::http::Body) -> Vec<u8> {
+    let mut buf = Vec::new();
+    let _ = body.read_to_end(&mut buf);
+    buf
 }
 
 fn get_or_create_user(conn: &postgres::Connection, platform: &str, platform_user_id: i64) -> (i64, Option<i64>, Option<String>) {
@@ -332,28 +320,6 @@ fn read_request_body(request: &IncomingRequest) -> Result<Vec<u8>, String> {
         }
     }
     Ok(buf)
-}
-
-fn read_response_body(response: &IncomingResponse) -> Option<Vec<u8>> {
-    let body = response.consume().ok()?;
-    let stream = body.stream().ok()?;
-    let mut buf = Vec::new();
-    loop {
-        match stream.blocking_read(4096) {
-            Err(_) => break,
-            Ok(vec) => { if vec.is_empty() { break; } buf.extend_from_slice(&vec); }
-        }
-    }
-    Some(buf)
-}
-
-fn write_response(out: ResponseOutparam, status: u16, body_bytes: &[u8]) {
-    let res = OutgoingResponse::new(Fields::new());
-    res.set_status_code(status).unwrap();
-    let body = res.body().unwrap();
-    { let stream = body.write().unwrap(); stream.write(body_bytes.into()).unwrap(); }
-    OutgoingBody::finish(body, None).unwrap();
-    ResponseOutparam::set(out, Ok(res));
 }
 
 export!(Plugin);

@@ -3,4 +3,4 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.dependencies]
-wassel-sdk = { git = "https://github.com/wasselteam/sdk-rust.git", tag = "v2.0.0" }
+wassel-sdk = { git = "https://github.com/wasselteam/sdk-rust.git", tag = "v2.1.1" }
