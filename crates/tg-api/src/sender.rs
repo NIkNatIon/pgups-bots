@@ -22,7 +22,7 @@ impl TgSender {
         );
 
         if !buttons.is_empty() {
-            let keyboard = TgInlineKeyboard::from_buttons(buttons);
+            let keyboard = TgInlineKeyboard::from(buttons);
             url.push_str("&reply_markup=");
             url.push_str(&urlencode(&keyboard.to_json()));
         }
@@ -76,7 +76,7 @@ impl TgSender {
         }
 
         if !buttons.is_empty() {
-            let keyboard = TgInlineKeyboard::from_buttons(buttons);
+            let keyboard = TgInlineKeyboard::from(buttons);
             body.extend_from_slice(format!("--{}\r\n", boundary).as_bytes());
             body.extend_from_slice(
                 b"Content-Disposition: form-data; name=\"reply_markup\"\r\n\r\n",

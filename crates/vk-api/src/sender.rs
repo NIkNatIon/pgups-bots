@@ -34,7 +34,7 @@ impl VkSender {
         );
 
         if !buttons.is_empty() {
-            let keyboard = VkKeyboard::from_buttons(buttons);
+            let keyboard = VkKeyboard::from(buttons);
             url.push_str("&keyboard=");
             url.push_str(&urlencode(&keyboard.to_json()));
         }

@@ -20,8 +20,8 @@ pub struct VkButtonAction {
     pub payload: String,
 }
 
-impl VkKeyboard {
-    pub fn from_buttons(buttons: &[Button]) -> Self {
+impl From<&[Button]> for VkKeyboard {
+    fn from(buttons: &[Button]) -> Self {
         let rows = buttons
             .iter()
             .take(10)
@@ -41,7 +41,9 @@ impl VkKeyboard {
             buttons: rows,
         }
     }
+}
 
+impl VkKeyboard {
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
     }
