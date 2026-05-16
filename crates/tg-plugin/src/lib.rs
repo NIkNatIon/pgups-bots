@@ -26,7 +26,7 @@ fn handle_request(request: Request) -> Response {
     let mut buf = Vec::new();
     let _ = body.read_to_end(&mut buf);
 
-    let update = match Update::parse(&buf) {
+    let update = match Update::try_from(buf.as_slice()) {
         Ok(u) => u,
         Err(_) => return "Bad request".into_response(),
     };

@@ -22,15 +22,19 @@ pub struct Message {
 }
 
 impl CallbackEvent {
-    pub fn parse(body: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice(body)
-    }
-
     pub fn into_message(self) -> Option<Message> {
         if self.event_type != "message_new" {
             return None;
         }
         let obj: MessageObject = serde_json::from_value(self.object?).ok()?;
         Some(obj.message)
+    }
+}
+
+impl TryFrom<&[u8]> for CallbackEvent {
+    type Error = serde_json::Error;
+
+    fn try_from(body: &[u8]) -> Result<Self, Self::Error> {
+        serde_json::from_slice(body)
     }
 }

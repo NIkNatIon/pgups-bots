@@ -41,7 +41,7 @@ impl Guest for Plugin {
             }
         };
 
-        let event = match CallbackEvent::parse(&body) {
+        let event = match CallbackEvent::try_from(body.as_slice()) {
             Ok(e) => e,
             Err(_) => {
                 "Bad request"
