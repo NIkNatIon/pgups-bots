@@ -1,12 +1,19 @@
-use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 
-use wassel_sdk::bindings::wassel::foundation::postgres::{self, Parameter};
-use wassel_sdk::http::{IntoResponse, Request, Response, client, handler};
+use wassel_sdk::bindings::{
+    export,
+    exports::wassel::foundation::http_handler::Guest,
+    wasi::http::types::{IncomingRequest, ResponseOutparam},
+    wasi::io::streams::StreamError,
+    wassel::foundation::postgres::{self, Parameter},
+};
+use wassel_sdk::http::{IntoResponse, client};
 
-use bot_core::{BotHandler, db, menu::MenuNode, messenger::BotResponse, schedule, texts::Texts};
+use bot_core::{BotHandler, db, i18n::I18n, menu::MenuNode, messenger::BotResponse, schedule};
 use vk_api::{callback::CallbackEvent, photo, sender::VkSender};
+
+struct Plugin;
 
 fn get_config(key: &str) -> String {
     wassel_sdk::bindings::wasi_config::store::get(key)
@@ -14,33 +21,52 @@ fn get_config(key: &str) -> String {
         .unwrap_or_default()
 }
 
-#[handler]
-fn handle_request(request: Request) -> Response {
-    let db_connection = get_config("db_connection");
-    let vk_token = get_config("vk_token");
-    let vk_confirmation_code = get_config("vk_confirmation_code");
-    let deanery_host = get_config("deanery_host");
+impl Guest for Plugin {
+    fn handle_request(request: IncomingRequest, response_out: ResponseOutparam) {
+        let db_connection = get_config("db_connection");
+        let vk_token = get_config("vk_token");
+        let vk_confirmation_code = get_config("vk_confirmation_code");
+        let deanery_host = get_config("deanery_host");
 
-    run_migrations(&db_connection);
+        run_migrations(&db_connection);
 
-    let mut body = request.into_body();
-    let mut buf = Vec::new();
-    let _ = body.read_to_end(&mut buf);
-
-    let event = match CallbackEvent::try_from(buf.as_slice()) {
-        Ok(e) => e,
-        Err(_) => return "Bad request".into_response(),
-    };
-
-    match event.event_type.as_str() {
-        "confirmation" => vk_confirmation_code.into_response(),
-        "message_new" => {
-            if let Some(message) = event.into_message() {
-                handle_message_new(message, &db_connection, &vk_token, &deanery_host);
+        let body = match read_request_body(&request) {
+            Ok(b) => b,
+            Err(_) => {
+                "Bad request"
+                    .into_response()
+                    .write_to_response_outparam(response_out);
+                return;
             }
-            "ok".into_response()
+        };
+
+        let event = match CallbackEvent::try_from(body.as_slice()) {
+            Ok(e) => e,
+            Err(_) => {
+                "Bad request"
+                    .into_response()
+                    .write_to_response_outparam(response_out);
+                return;
+            }
+        };
+
+        match event.event_type.as_str() {
+            "confirmation" => {
+                vk_confirmation_code
+                    .into_response()
+                    .write_to_response_outparam(response_out);
+                return;
+            }
+            "message_new" => {
+                if let Some(message) = event.into_message() {
+                    handle_message_new(message, &db_connection, &vk_token, &deanery_host);
+                }
+            }
+            _ => {}
         }
-        _ => "ok".into_response(),
+
+        "ok".into_response()
+            .write_to_response_outparam(response_out);
     }
 }
 
@@ -67,10 +93,10 @@ fn handle_message_new(
         Err(_) => return,
     };
 
-    let (user_id, current_node_id, student_group) = get_or_create_user(&conn, "vk", peer_id);
+    let (user_id, current_node_id, student_group, lang) = get_or_create_user(&conn, "vk", peer_id);
     let menu_nodes = load_menu_nodes(&conn);
-    let texts = load_texts(&conn);
-    let handler = BotHandler::new(menu_nodes, texts);
+    let i18n = load_i18n(&conn, &lang);
+    let handler = BotHandler::new(menu_nodes, i18n);
 
     let payload = message.payload.as_deref().map(|p| p.trim_matches('"'));
 
@@ -116,23 +142,23 @@ fn handle_message_new(
                 user_id,
                 vk_token,
                 deanery_host,
-                handler.texts_ref(),
+                &handler,
             );
         } else {
             let sender = VkSender::new(vk_token.to_string());
             let buttons = vec![
                 bot_core::messenger::Button {
-                    label: handler.texts_ref().get("btn.back").into(),
+                    label: handler.i18n().get("btn-back"),
                     payload: "schedule_back".into(),
                 },
                 bot_core::messenger::Button {
-                    label: handler.texts_ref().get("btn.home").into(),
+                    label: handler.i18n().get("btn-home"),
                     payload: "1".into(),
                 },
             ];
             let url = sender.build_send_url(
                 peer_id,
-                handler.texts_ref().get("msg.schedule_invalid_group"),
+                &handler.i18n().get("msg-schedule-invalid-group"),
                 &buttons,
                 None,
             );
@@ -154,7 +180,7 @@ fn handle_message_new(
         user_id,
         vk_token,
         deanery_host,
-        handler.texts_ref(),
+        &handler,
     );
 }
 
@@ -165,9 +191,10 @@ fn process_response(
     user_id: i64,
     vk_token: &str,
     deanery_host: &str,
-    texts: &Texts,
+    handler: &BotHandler,
 ) {
     let sender = VkSender::new(vk_token.to_string());
+    let i18n = handler.i18n();
 
     match response {
         BotResponse::Message(msg, new_node_id) => {
@@ -209,17 +236,15 @@ fn process_response(
                 Ok(resp) => {
                     let bytes = read_body(resp.into_body());
                     match serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
-                        Ok(lessons) if lessons.is_empty() => {
-                            texts.get("msg.schedule_day_off").to_string()
-                        }
-                        Ok(lessons) => schedule::format_lessons(&lessons, &weekday, &parity),
-                        Err(_) => texts.get("msg.schedule_error").to_string(),
+                        Ok(lessons) if lessons.is_empty() => i18n.get("msg-schedule-day-off"),
+                        Ok(lessons) => schedule::format_lessons(&lessons, &weekday, &parity, i18n),
+                        Err(_) => i18n.get("msg-schedule-error"),
                     }
                 }
-                Err(_) => texts.get("msg.schedule_connection_error").to_string(),
+                Err(_) => i18n.get("msg-schedule-connection-error"),
             };
 
-            let buttons = schedule_buttons(texts);
+            let buttons = schedule_buttons(i18n);
             let url = sender.build_send_url(peer_id, &text, &buttons, None);
             let _ = client::get(url).send();
         }
@@ -247,17 +272,18 @@ fn process_response(
                 if let Ok(resp) = client::get(url).send() {
                     let bytes = read_body(resp.into_body());
                     if let Ok(lessons) = serde_json::from_slice::<Vec<schedule::Lesson>>(&bytes) {
-                        full_text.push_str(&schedule::format_lessons(&lessons, weekday, &parity));
+                        full_text
+                            .push_str(&schedule::format_lessons(&lessons, weekday, &parity, i18n));
                         full_text.push('\n');
                     }
                 }
             }
 
             if full_text.is_empty() {
-                full_text = texts.get("msg.schedule_week_error").to_string();
+                full_text = i18n.get("msg-schedule-week-error");
             }
 
-            let buttons = schedule_buttons(texts);
+            let buttons = schedule_buttons(i18n);
             let url = sender.build_send_url(peer_id, &full_text, &buttons, None);
             let _ = client::get(url).send();
         }
@@ -272,48 +298,89 @@ fn process_response(
 
             let buttons = vec![
                 bot_core::messenger::Button {
-                    label: texts.get("btn.back").into(),
+                    label: i18n.get("btn-back"),
                     payload: "schedule_back".into(),
                 },
                 bot_core::messenger::Button {
-                    label: texts.get("btn.home").into(),
+                    label: i18n.get("btn-home"),
                     payload: "1".into(),
                 },
             ];
-            let url = sender.build_send_url(peer_id, texts.get("msg.ask_group"), &buttons, None);
+            let url = sender.build_send_url(peer_id, &i18n.get("msg-ask-group"), &buttons, None);
+            let _ = client::get(url).send();
+        }
+        BotResponse::LanguageSelect => {
+            let buttons = vec![
+                bot_core::messenger::Button {
+                    label: "🇷🇺 Русский".into(),
+                    payload: "lang_ru".into(),
+                },
+                bot_core::messenger::Button {
+                    label: "🇬🇧 English".into(),
+                    payload: "lang_en".into(),
+                },
+                bot_core::messenger::Button {
+                    label: "🇨🇳 中文".into(),
+                    payload: "lang_zh".into(),
+                },
+                bot_core::messenger::Button {
+                    label: i18n.get("btn-back"),
+                    payload: "1".into(),
+                },
+            ];
+            let url =
+                sender.build_send_url(peer_id, &i18n.get("msg-select-language"), &buttons, None);
+            let _ = client::get(url).send();
+        }
+        BotResponse::LanguageChanged { lang } => {
+            let _ = conn.execute(
+                db::UPDATE_USER_LANG,
+                &[Parameter::Text(lang.clone()), Parameter::Int64(user_id)],
+            );
+            let new_i18n = load_i18n(conn, &lang);
+            let new_menu = load_menu_nodes(conn);
+            let new_handler = BotHandler::new(new_menu, new_i18n);
+            let (msg, new_node_id) = new_handler.navigate_to_root_public();
+            if let Some(node_id) = new_node_id {
+                let _ = conn.execute(
+                    db::UPDATE_USER_NODE,
+                    &[Parameter::Int64(node_id), Parameter::Int64(user_id)],
+                );
+            }
+            let url = sender.build_send_url(peer_id, &msg.text, &msg.buttons, None);
             let _ = client::get(url).send();
         }
     }
 }
 
-fn schedule_buttons(texts: &Texts) -> Vec<bot_core::messenger::Button> {
+fn schedule_buttons(i18n: &I18n) -> Vec<bot_core::messenger::Button> {
     vec![
         bot_core::messenger::Button {
-            label: texts.get("btn.schedule_today").into(),
+            label: i18n.get("btn-schedule-today"),
             payload: "schedule_today".into(),
         },
         bot_core::messenger::Button {
-            label: texts.get("btn.schedule_tomorrow").into(),
+            label: i18n.get("btn-schedule-tomorrow"),
             payload: "schedule_tomorrow".into(),
         },
         bot_core::messenger::Button {
-            label: texts.get("btn.schedule_this_week").into(),
+            label: i18n.get("btn-schedule-this-week"),
             payload: "schedule_this_week".into(),
         },
         bot_core::messenger::Button {
-            label: texts.get("btn.schedule_next_week").into(),
+            label: i18n.get("btn-schedule-next-week"),
             payload: "schedule_next_week".into(),
         },
         bot_core::messenger::Button {
-            label: texts.get("btn.schedule_change_group").into(),
+            label: i18n.get("btn-schedule-change-group"),
             payload: "schedule_change_group".into(),
         },
         bot_core::messenger::Button {
-            label: texts.get("btn.back").into(),
+            label: i18n.get("btn-back"),
             payload: "schedule_back".into(),
         },
         bot_core::messenger::Button {
-            label: texts.get("btn.home").into(),
+            label: i18n.get("btn-home"),
             payload: "1".into(),
         },
     ]
@@ -363,7 +430,7 @@ fn get_or_create_user(
     conn: &postgres::Connection,
     platform: &str,
     platform_user_id: i64,
-) -> (i64, Option<i64>, Option<String>) {
+) -> (i64, Option<i64>, Option<String>, String) {
     if let Ok(rows) = conn.query(
         db::SELECT_USER,
         &[
@@ -374,7 +441,7 @@ fn get_or_create_user(
     {
         let user_id = match &row[0] {
             postgres::Value::Int64(id) => *id,
-            _ => return (0, None, None),
+            _ => return (0, None, None, "ru".into()),
         };
         let node_id = match &row[1] {
             postgres::Value::Int64(id) => Some(*id),
@@ -384,7 +451,11 @@ fn get_or_create_user(
             postgres::Value::Text(g) => Some(g.clone()),
             _ => None,
         };
-        return (user_id, node_id, group);
+        let lang = match &row[3] {
+            postgres::Value::Text(l) => l.clone(),
+            _ => "ru".into(),
+        };
+        return (user_id, node_id, group, lang);
     }
     if let Ok(rows) = conn.query(
         db::UPSERT_USER,
@@ -398,9 +469,9 @@ fn get_or_create_user(
             postgres::Value::Int64(id) => *id,
             _ => 0,
         };
-        return (user_id, None, None);
+        return (user_id, None, None, "ru".into());
     }
-    (0, None, None)
+    (0, None, None, "ru".into())
 }
 
 fn load_menu_nodes(conn: &postgres::Connection) -> Vec<MenuNode> {
@@ -424,19 +495,11 @@ fn load_menu_nodes(conn: &postgres::Connection) -> Vec<MenuNode> {
                     postgres::Value::Text(v) => v.clone(),
                     _ => return None,
                 },
-                title: match &row[3] {
-                    postgres::Value::Text(v) => v.clone(),
-                    _ => return None,
-                },
-                content: match &row[4] {
+                image_url: match &row[3] {
                     postgres::Value::Text(v) => Some(v.clone()),
                     _ => None,
                 },
-                image_url: match &row[5] {
-                    postgres::Value::Text(v) => Some(v.clone()),
-                    _ => None,
-                },
-                sort_order: match &row[6] {
+                sort_order: match &row[4] {
                     postgres::Value::Int32(v) => *v,
                     _ => 0,
                 },
@@ -445,16 +508,33 @@ fn load_menu_nodes(conn: &postgres::Connection) -> Vec<MenuNode> {
         .collect()
 }
 
-fn load_texts(conn: &postgres::Connection) -> Texts {
-    let mut map = HashMap::new();
-    if let Ok(rows) = conn.query(db::SELECT_ALL_TEXTS, &[]) {
-        for row in &rows.rows {
-            if let (Some(postgres::Value::Text(key)), Some(postgres::Value::Text(value))) =
-                (row.first(), row.get(1))
-            {
-                map.insert(key.clone(), value.clone());
+fn load_i18n(conn: &postgres::Connection, lang: &str) -> I18n {
+    if let Ok(rows) = conn.query(db::SELECT_TRANSLATION, &[Parameter::Text(lang.to_string())])
+        && let Some(row) = rows.rows.first()
+        && let postgres::Value::Text(content) = &row[0]
+    {
+        return I18n::new(lang, content);
+    }
+    I18n::new("ru", "")
+}
+
+fn read_request_body(request: &IncomingRequest) -> Result<Vec<u8>, String> {
+    let body = request.consume().map_err(|_| "No body")?;
+    let stream = body.stream().map_err(|_| "No stream")?;
+    let mut buf = Vec::new();
+    loop {
+        match stream.blocking_read(4096) {
+            Err(StreamError::Closed) => break,
+            Err(e) => return Err(format!("{e:?}")),
+            Ok(vec) => {
+                if vec.is_empty() {
+                    break;
+                }
+                buf.extend_from_slice(&vec);
             }
         }
     }
-    Texts::new(map)
+    Ok(buf)
 }
+
+export!(Plugin);

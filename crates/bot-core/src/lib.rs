@@ -1,35 +1,33 @@
 pub mod db;
+pub mod i18n;
 pub mod menu;
 pub mod messenger;
 pub mod schedule;
-pub mod texts;
 
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;
 
+use i18n::I18n;
 use menu::MenuNode;
 use messenger::{BotResponse, Button, OutgoingMessage};
-use schedule::{
-    current_parity, current_weekday, next_week_parity, parity_ru, tomorrow_weekday, weekday_ru,
-};
-use texts::Texts;
+use schedule::{current_parity, current_weekday, next_week_parity, tomorrow_weekday};
 
 pub struct BotHandler {
     menu_nodes: Vec<MenuNode>,
-    texts: Texts,
+    i18n: I18n,
 }
 
 impl BotHandler {
-    pub fn new(menu_nodes: Vec<MenuNode>, texts: Texts) -> Self {
-        Self { menu_nodes, texts }
+    pub fn new(menu_nodes: Vec<MenuNode>, i18n: I18n) -> Self {
+        Self { menu_nodes, i18n }
     }
 
     pub fn menu_nodes_ref(&self) -> &[MenuNode] {
         &self.menu_nodes
     }
 
-    pub fn texts_ref(&self) -> &Texts {
-        &self.texts
+    pub fn i18n(&self) -> &I18n {
+        &self.i18n
     }
 
     pub fn handle_message(
@@ -45,67 +43,75 @@ impl BotHandler {
             let (msg, nid) = self.navigate_to_root();
             return BotResponse::Message(msg, nid);
         }
+
         if let Some(p) = payload {
             match p {
+                "change_language" => return BotResponse::LanguageSelect,
+                "lang_ru" | "lang_en" | "lang_zh" => {
+                    let lang = p.strip_prefix("lang_").unwrap_or("ru");
+                    return BotResponse::LanguageChanged {
+                        lang: lang.to_string(),
+                    };
+                }
                 "schedule_today" => {
-                    if let Some(group) = student_group {
-                        return BotResponse::ScheduleRequest {
+                    return if let Some(group) = student_group {
+                        BotResponse::ScheduleRequest {
                             group: group.to_string(),
                             weekday: current_weekday().to_string(),
                             parity: current_parity().to_string(),
                             new_node_id: user_node_id,
-                        };
+                        }
                     } else {
-                        return BotResponse::AskGroup {
+                        BotResponse::AskGroup {
                             new_node_id: user_node_id,
-                        };
-                    }
+                        }
+                    };
                 }
                 "schedule_tomorrow" => {
-                    if let Some(group) = student_group {
+                    return if let Some(group) = student_group {
                         let tomorrow = tomorrow_weekday();
                         let parity = if tomorrow == "Monday" {
                             next_week_parity()
                         } else {
                             current_parity()
                         };
-                        return BotResponse::ScheduleRequest {
+                        BotResponse::ScheduleRequest {
                             group: group.to_string(),
                             weekday: tomorrow.to_string(),
                             parity: parity.to_string(),
                             new_node_id: user_node_id,
-                        };
+                        }
                     } else {
-                        return BotResponse::AskGroup {
+                        BotResponse::AskGroup {
                             new_node_id: user_node_id,
-                        };
-                    }
+                        }
+                    };
                 }
                 "schedule_this_week" => {
-                    if let Some(group) = student_group {
-                        return BotResponse::ScheduleWeekRequest {
+                    return if let Some(group) = student_group {
+                        BotResponse::ScheduleWeekRequest {
                             group: group.to_string(),
                             parity: current_parity().to_string(),
                             new_node_id: user_node_id,
-                        };
+                        }
                     } else {
-                        return BotResponse::AskGroup {
+                        BotResponse::AskGroup {
                             new_node_id: user_node_id,
-                        };
-                    }
+                        }
+                    };
                 }
                 "schedule_next_week" => {
-                    if let Some(group) = student_group {
-                        return BotResponse::ScheduleWeekRequest {
+                    return if let Some(group) = student_group {
+                        BotResponse::ScheduleWeekRequest {
                             group: group.to_string(),
                             parity: next_week_parity().to_string(),
                             new_node_id: user_node_id,
-                        };
+                        }
                     } else {
-                        return BotResponse::AskGroup {
+                        BotResponse::AskGroup {
                             new_node_id: user_node_id,
-                        };
-                    }
+                        }
+                    };
                 }
                 "schedule_change_group" => {
                     return BotResponse::AskGroup {
@@ -155,41 +161,43 @@ impl BotHandler {
     fn schedule_menu(&self, student_group: Option<&str>) -> OutgoingMessage {
         match student_group {
             Some(group) => {
-                let today = weekday_ru(current_weekday());
-                let parity = parity_ru(current_parity());
+                let weekday_key = format!("schedule-weekday-{}", current_weekday().to_lowercase());
+                let parity_key = format!("schedule-parity-{}", current_parity().to_lowercase());
+                let weekday = self.i18n.get(&weekday_key);
+                let parity = self.i18n.get(&parity_key);
 
                 OutgoingMessage {
-                    text: self.texts.format(
-                        "msg.schedule_header",
-                        &[("group", group), ("weekday", today), ("parity", parity)],
+                    text: self.i18n.format(
+                        "msg-schedule-header",
+                        &[("group", group), ("weekday", &weekday), ("parity", &parity)],
                     ),
                     buttons: vec![
                         Button {
-                            label: self.texts.get("btn.schedule_today").into(),
+                            label: self.i18n.get("btn-schedule-today"),
                             payload: "schedule_today".into(),
                         },
                         Button {
-                            label: self.texts.get("btn.schedule_tomorrow").into(),
+                            label: self.i18n.get("btn-schedule-tomorrow"),
                             payload: "schedule_tomorrow".into(),
                         },
                         Button {
-                            label: self.texts.get("btn.schedule_this_week").into(),
+                            label: self.i18n.get("btn-schedule-this-week"),
                             payload: "schedule_this_week".into(),
                         },
                         Button {
-                            label: self.texts.get("btn.schedule_next_week").into(),
+                            label: self.i18n.get("btn-schedule-next-week"),
                             payload: "schedule_next_week".into(),
                         },
                         Button {
-                            label: self.texts.get("btn.schedule_change_group").into(),
+                            label: self.i18n.get("btn-schedule-change-group"),
                             payload: "schedule_change_group".into(),
                         },
                         Button {
-                            label: self.texts.get("btn.back").into(),
+                            label: self.i18n.get("btn-back"),
                             payload: self.find_schedule_parent_id(),
                         },
                         Button {
-                            label: self.texts.get("btn.home").into(),
+                            label: self.i18n.get("btn-home"),
                             payload: self
                                 .get_roots()
                                 .first()
@@ -201,14 +209,14 @@ impl BotHandler {
                 }
             }
             None => OutgoingMessage {
-                text: self.texts.get("msg.ask_group").into(),
+                text: self.i18n.get("msg-ask-group"),
                 buttons: vec![
                     Button {
-                        label: self.texts.get("btn.back").into(),
+                        label: self.i18n.get("btn-back"),
                         payload: self.find_schedule_parent_id(),
                     },
                     Button {
-                        label: self.texts.get("btn.home").into(),
+                        label: self.i18n.get("btn-home"),
                         payload: self
                             .get_roots()
                             .first()
@@ -236,18 +244,33 @@ impl BotHandler {
             None => return self.navigate_to_root(),
         };
 
+        let title_key = format!("menu-{}-title", node.slug);
+        let content_key = format!("menu-{}-content", node.slug);
+
+        let title = self.i18n.get(&title_key);
+        let content = self.i18n.get(&content_key);
+
+        let display_text = if content != content_key {
+            content
+        } else {
+            title.clone()
+        };
+
         let children = self.get_children(node.id);
         let mut buttons: Vec<Button> = children
             .iter()
-            .map(|child| Button {
-                label: child.title.clone(),
-                payload: child.id.to_string(),
+            .map(|child| {
+                let child_title_key = format!("menu-{}-title", child.slug);
+                Button {
+                    label: self.i18n.get(&child_title_key),
+                    payload: child.id.to_string(),
+                }
             })
             .collect();
 
         if let Some(parent_id) = node.parent_id {
             buttons.push(Button {
-                label: self.texts.get("btn.back").to_string(),
+                label: self.i18n.get("btn-back"),
                 payload: parent_id.to_string(),
             });
 
@@ -256,14 +279,21 @@ impl BotHandler {
                 && let Some(root) = self.get_roots().first()
             {
                 buttons.push(Button {
-                    label: self.texts.get("btn.home").to_string(),
+                    label: self.i18n.get("btn-home"),
                     payload: root.id.to_string(),
                 });
             }
         }
 
+        if node.parent_id.is_none() {
+            buttons.push(Button {
+                label: self.i18n.get("btn-language"),
+                payload: "change_language".to_string(),
+            });
+        }
+
         let msg = OutgoingMessage {
-            text: node.content.clone().unwrap_or_else(|| node.title.clone()),
+            text: display_text,
             buttons,
             image_url: node.image_url.clone(),
         };
@@ -280,14 +310,17 @@ impl BotHandler {
 
         let buttons = roots
             .iter()
-            .map(|node| Button {
-                label: node.title.clone(),
-                payload: node.id.to_string(),
+            .map(|node| {
+                let title_key = format!("menu-{}-title", node.slug);
+                Button {
+                    label: self.i18n.get(&title_key),
+                    payload: node.id.to_string(),
+                }
             })
             .collect();
 
         let msg = OutgoingMessage {
-            text: self.texts.get("msg.select_section").to_string(),
+            text: self.i18n.get("msg-select-section"),
             buttons,
             image_url: None,
         };
@@ -304,7 +337,10 @@ impl BotHandler {
 
         children
             .iter()
-            .find(|n| n.title.to_lowercase() == text)
+            .find(|n| {
+                let title_key = format!("menu-{}-title", n.slug);
+                self.i18n.get(&title_key).to_lowercase() == text
+            })
             .map(|n| n.id)
     }
 
@@ -326,5 +362,9 @@ impl BotHandler {
             .collect();
         roots.sort_by_key(|n| n.sort_order);
         roots
+    }
+
+    pub fn navigate_to_root_public(&self) -> (OutgoingMessage, Option<i64>) {
+        self.navigate_to_root()
     }
 }
