@@ -28,9 +28,8 @@ pub enum BotResponse {
     AskGroup {
         new_node_id: Option<i64>,
     },
-}
-
-pub trait Messenger {
-    type Error: core::fmt::Debug;
-    fn send_message(&self, user_id: i64, message: &OutgoingMessage) -> Result<(), Self::Error>;
+    LanguageSelect,
+    LanguageChanged {
+        lang: String,
+    },
 }

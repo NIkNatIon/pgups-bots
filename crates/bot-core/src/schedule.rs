@@ -1,14 +1,5 @@
+use crate::i18n::I18n;
 use serde::Deserialize;
-
-const PAIR_TIMES: [&str; 7] = [
-    "9:00 - 10:30",
-    "10:45 - 12:15",
-    "13:15 - 14:45",
-    "15:00 - 16:30",
-    "16:45 - 18:15",
-    "18:25 - 19:55",
-    "20:05 - 21:35",
-];
 
 #[derive(Debug, Deserialize)]
 pub struct Lesson {
@@ -33,20 +24,40 @@ pub struct Room {
     pub name: String,
 }
 
-pub fn format_lessons(lessons: &[Lesson], weekday: &str, parity: &str) -> String {
+const PAIR_TIMES: [&str; 7] = [
+    "9:00 - 10:30",
+    "10:45 - 12:15",
+    "13:15 - 14:45",
+    "15:00 - 16:30",
+    "16:45 - 18:15",
+    "18:25 - 19:55",
+    "20:05 - 21:35",
+];
+
+pub fn format_lessons(lessons: &[Lesson], weekday: &str, parity: &str, i18n: &I18n) -> String {
+    let weekday_key = format!("schedule-weekday-{}", weekday.to_lowercase());
+    let parity_key = format!("schedule-parity-{}", parity.to_lowercase());
+    let weekday_name = i18n.get(&weekday_key);
+    let parity_name = i18n.get(&parity_key);
+
     if lessons.is_empty() {
         return format!(
-            "{} ({})\nПар нет.\n",
-            weekday_ru(weekday),
-            parity_ru(parity)
+            "{} ({})\n{}\n",
+            weekday_name,
+            parity_name,
+            i18n.get("schedule-no-lessons")
         );
     }
 
     let mut sorted: Vec<&Lesson> = lessons.iter().collect();
     sorted.sort_by_key(|l| l.pair_num);
+    sorted.dedup_by_key(|l| l.pair_num);
 
-    let mut result = format!("{}\n", weekday_ru(weekday).to_uppercase());
-    result.push_str(&format!("({})\n", parity_ru(parity)));
+    let mut result = format!("{}\n", weekday_name.to_uppercase());
+    result.push_str(&format!("({})\n", parity_name));
+
+    let pair_word = i18n.get("schedule-pair");
+    let room_word = i18n.get("schedule-room");
 
     for lesson in sorted {
         let teacher = lesson
@@ -61,11 +72,11 @@ pub fn format_lessons(lessons: &[Lesson], weekday: &str, parity: &str) -> String
 
         result.push_str("———————————————\n");
         result.push_str(&format!("{}\n", time));
-        result.push_str(&format!("{} пара\n", lesson.pair_num));
+        result.push_str(&format!("{} {}\n", lesson.pair_num, pair_word));
         result.push_str(&format!("{}\n", lesson.discipline));
         result.push_str(&format!("{}\n", lesson.type_of_discipline));
         if !room.is_empty() {
-            result.push_str(&format!("Ауд: {}\n", room));
+            result.push_str(&format!("{}: {}\n", room_word, room));
         }
         if !teacher.is_empty() {
             result.push_str(&format!("{}\n", teacher));
@@ -74,36 +85,6 @@ pub fn format_lessons(lessons: &[Lesson], weekday: &str, parity: &str) -> String
     result.push_str("———————————————\n");
 
     result
-}
-
-pub fn format_week(days: &[(String, String, Vec<Lesson>)]) -> String {
-    let mut result = String::new();
-    for (weekday, parity, lessons) in days {
-        result.push_str(&format_lessons(lessons, weekday, parity));
-        result.push('\n');
-    }
-    result
-}
-
-pub fn weekday_ru(weekday: &str) -> &str {
-    match weekday {
-        "Monday" => "Понедельник",
-        "Tuesday" => "Вторник",
-        "Wednesday" => "Среда",
-        "Thursday" => "Четверг",
-        "Friday" => "Пятница",
-        "Saturday" => "Суббота",
-        "Sunday" => "Воскресенье",
-        _ => weekday,
-    }
-}
-
-pub fn parity_ru(parity: &str) -> &str {
-    match parity {
-        "Odd" => "нечётная",
-        "Even" => "чётная",
-        _ => parity,
-    }
 }
 
 pub fn current_weekday() -> &'static str {
