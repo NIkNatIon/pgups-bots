@@ -32,4 +32,15 @@ pub enum BotResponse {
     LanguageChanged {
         lang: String,
     },
+    OnboardingAskLang,
+    OnboardingAskRole,
+    OnboardingAskGroup,
+    RoleChanged {
+        role: String,
+    },
+    Settings,
+    SettingsChangeGroup,
+    SettingsGroupChanged {
+        group: String,
+    },
 }
