@@ -26,13 +26,13 @@ CREATE TABLE IF NOT EXISTS translations (
 pub const SELECT_ALL_MENU_NODES: &str =
     "SELECT id, parent_id, slug, image_url, sort_order FROM menu_nodes ORDER BY sort_order";
 
-pub const SELECT_USER: &str = "SELECT id, current_menu_node_id, student_group, lang FROM users WHERE platform = $1 AND platform_user_id = $2";
+pub const SELECT_USER: &str = "SELECT id, current_menu_node_id, student_group, lang, role, onboarded FROM users WHERE platform = $1 AND platform_user_id = $2";
 
 pub const UPSERT_USER: &str = r#"
 INSERT INTO users (platform, platform_user_id)
 VALUES ($1, $2)
 ON CONFLICT (platform, platform_user_id) DO NOTHING
-RETURNING id, current_menu_node_id, student_group, lang
+RETURNING id, current_menu_node_id, student_group, lang, role, onboarded
 "#;
 
 pub const UPDATE_USER_NODE: &str = "UPDATE users SET current_menu_node_id = $1 WHERE id = $2";
@@ -44,3 +44,7 @@ pub const CLEAR_USER_GROUP: &str = "UPDATE users SET student_group = NULL WHERE 
 pub const UPDATE_USER_LANG: &str = "UPDATE users SET lang = $1 WHERE id = $2";
 
 pub const SELECT_TRANSLATION: &str = "SELECT content FROM translations WHERE lang = $1";
+
+pub const UPDATE_USER_ROLE: &str = "UPDATE users SET role = $1 WHERE id = $2";
+
+pub const UPDATE_USER_ONBOARDED: &str = "UPDATE users SET onboarded = $1 WHERE id = $2";

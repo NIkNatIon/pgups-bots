@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS users (
     platform_user_id BIGINT NOT NULL,
     current_menu_node_id BIGINT REFERENCES menu_nodes(id),
     student_group TEXT,
-    lang TEXT DEFAULT 'ru',
+    lang TEXT,
+    role TEXT,
+    onboarded BOOLEAN DEFAULT false,
     UNIQUE(platform, platform_user_id)
 );
 

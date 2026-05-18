@@ -562,6 +562,31 @@ menu-prof_docs-content =
 
     🏡 Отдел загородных объектов
     https://www.pgups.ru/struct/zagorodnye_obekty/geobaza-universiteta-korpusa-dlya-otdykha
+
+# Онбординг
+msg-onboarding-welcome = Добро пожаловать! Давайте настроим бота для вас.
+msg-onboarding-ask-lang = Выберите язык:
+msg-onboarding-ask-role = Выберите вашу роль:
+msg-onboarding-ask-group = Введите номер вашей группы (например, ИВБ-211):
+msg-onboarding-skip-group = Вы можете пропустить этот шаг.
+msg-onboarding-complete = Настройка завершена!
+
+# Роли
+role-applicant = 🎓 Абитуриент
+role-student = 👨‍🎓 Студент
+role-teacher = 👩‍🏫 Преподаватель
+role-guest = 👤 Гость
+
+# Настройки
+msg-settings = Настройки
+msg-settings-lang = Язык: { $lang }
+msg-settings-role = Роль: { $role }
+msg-settings-group = Группа: { $group }
+btn-settings = ⚙️ Настройки
+btn-settings-change-lang = Сменить язык
+btn-settings-change-role = Сменить роль
+btn-settings-change-group = Сменить группу
+btn-skip = Пропустить
 ');
 
 -- ========================================
@@ -1045,6 +1070,31 @@ menu-prof_docs-content =
 
     🤝 Trade union
     https://www.pgups.ru/employees/the-trade-union/
+
+# Onboarding
+msg-onboarding-welcome = Welcome! Let us set up the bot for you.
+msg-onboarding-ask-lang = Select language:
+msg-onboarding-ask-role = Select your role:
+msg-onboarding-ask-group = Enter your group number (e.g. IVB-211):
+msg-onboarding-skip-group = You can skip this step.
+msg-onboarding-complete = Setup complete!
+
+# Roles
+role-applicant = 🎓 Applicant
+role-student = 👨‍🎓 Student
+role-teacher = 👩‍🏫 Teacher
+role-guest = 👤 Guest
+
+# Settings
+msg-settings = Settings
+msg-settings-lang = Language: { $lang }
+msg-settings-role = Role: { $role }
+msg-settings-group = Group: { $group }
+btn-settings = ⚙️ Settings
+btn-settings-change-lang = Change language
+btn-settings-change-role = Change role
+btn-settings-change-group = Change group
+btn-skip = Skip
 ');
 
 -- ========================================
@@ -1386,4 +1436,29 @@ menu-prof_docs-content =
 
     ✉️ 企业邮箱
     https://www.pgups.ru/struct/upravlenie_informatizatsii/korporativnaya-pochta
+
+# 入门引导
+msg-onboarding-welcome = 欢迎！让我们为您设置机器人。
+msg-onboarding-ask-lang = 请选择语言：
+msg-onboarding-ask-role = 请选择您的角色：
+msg-onboarding-ask-group = 请输入您的班级编号（例如 ИВБ-211）：
+msg-onboarding-skip-group = 您可以跳过此步骤。
+msg-onboarding-complete = 设置完成！
+
+# 角色
+role-applicant = 🎓 申请人
+role-student = 👨‍🎓 学生
+role-teacher = 👩‍🏫 教师
+role-guest = 👤 访客
+
+# 设置
+msg-settings = 设置
+msg-settings-lang = 语言：{ $lang }
+msg-settings-role = 角色：{ $role }
+msg-settings-group = 班级：{ $group }
+btn-settings = ⚙️ 设置
+btn-settings-change-lang = 更换语言
+btn-settings-change-role = 更换角色
+btn-settings-change-group = 更换班级
+btn-skip = 跳过
 ');
